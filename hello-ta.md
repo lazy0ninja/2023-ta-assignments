@@ -3,7 +3,7 @@ output:
   pdf_document: default
   html_document: default
 ---
-Hello TA S0 Assignment
+Hello TA - S0 Assignment
 ================
 
 ## Load “tidyverse” and “igraph”
