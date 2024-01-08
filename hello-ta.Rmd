@@ -1,6 +1,6 @@
 ---
-title: "Hello TA - S0 Assignment"
-output: github_document
+title: "Hello TA"
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}

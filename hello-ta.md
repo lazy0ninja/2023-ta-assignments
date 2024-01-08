@@ -1,8 +1,3 @@
----
-output:
-  pdf_document: default
-  html_document: default
----
 Hello TA - S0 Assignment
 ================
 
@@ -63,3 +58,14 @@ library(igraph)
     ## The following object is masked from 'package:base':
     ## 
     ##     union
+
+adding test code
+
+``` r
+x <- 1:10
+y <- 1:10
+plot(x,y)
+```
+
+![](/Users/kaz/Desktop/MMA%20-%20WINTER%20Code/Talent%20Analytics/2023-ta-assignments/hello-ta_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+\`\`\`
