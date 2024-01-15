@@ -1,0 +1,49 @@
+---
+title: "Performance Paradox"
+output: "md_document"
+---
+
+### load the data and packages
+```{r}
+library(tidyverse)
+df <- read.csv("/Users/kaz/Desktop/MMA - WINTER Code/Talent Analytics/Session3/performance_data.csv")
+```
+
+```{r}
+head(df)
+```
+
+# average performance of each worker
+```{r}
+df %>%
+  summarise(worker1 = mean(worker1),
+            worker2 = mean(worker2),
+            worker3 = mean(worker3))
+```
+
+```
+
+
+### visualize the data
+```{r}
+long_df <- df %>%
+  gather(key = "worker", value = "performance", worker1, worker2, worker3) %>%
+  mutate(intervention = ifelse(worker == "worker1" & w1_intervention != "None", as.character(day),
+                               ifelse(worker == "worker2" & w2_intervention != "None", as.character(day),
+                                      ifelse(worker == "worker3" & w3_intervention != "None", as.character(day), NA))))
+
+# Create the line plot with separate facets for each worker, aligned vertically
+ggplot(long_df, aes(x = day, y = performance, group = worker, colour = worker)) +
+  geom_line() +
+  geom_vline(data = subset(long_df, !is.na(intervention)), aes(xintercept = as.numeric(intervention)), linetype = "dashed") +
+  facet_wrap(~ worker, scales = "free_y", nrow = 3) +
+  labs(title = "Performance over Days with Interventions",
+       x = "Day",
+       y = "Performance",
+       colour = "Worker") +
+  theme_minimal()
+```
+
+### Notes
+- One interventino happnes when perfomances are low and the other happens when performances are high
+- rewards vs punishment
