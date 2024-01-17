@@ -1,6 +1,6 @@
 ---
 title: "Performance Paradox"
-output: "md_document"
+output: "pdf_document"
 ---
 
 ### load the data and packages
