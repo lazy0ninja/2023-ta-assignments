@@ -257,7 +257,7 @@ applications <- applications %>%
 ```
 
 
-
+### Creating separation and au indicator
 ```{r}
 
 # sort by examiner_id and quarter
@@ -265,7 +265,7 @@ applications <- applications %>%
   arrange(examiner_id, quarter)
 ```
 
-Drop duplicated columns
+- Drop duplicated columns after merging
 ```{r}
 applications_selected <- applications %>%
   select(
@@ -292,7 +292,7 @@ applications_selected <- applications %>%
 
 ```
 
-
+**in order to add separation we must know when each of employee's max quarter and compare it to max quarter in the dataset**
 ```{r}
 # find the latest time quarter for each examiner
 applications_selected %>%
@@ -301,9 +301,8 @@ applications_selected %>%
 
 ```
 
-
 ```{r}
-# unique quarters values and count
+# unique quarters values and count  (when is the latest quarter in the dataset?)
 applications_selected %>%
   group_by(quarter) %>%
   summarise(n = n_distinct(examiner_id)) %>%
@@ -313,7 +312,6 @@ applications_selected %>%
 
 
 ```{r}
-# Calculate the maximum quarter in the dataset
 overall_max_quarter <- "2017/1"
 
 # Create the separation_indicator
@@ -328,8 +326,10 @@ applications_selected
 
 ```
 
+- Our separation data shoudl look like 0 0 0 0 0 0 1 -> this one indicates that the employee has left the company
+- if 0 0 0 0 0 0 0 -> this one indicates that the employee is still working for the company
 
-Add AU move Indicator
+**Add AU move Indicator**
 ```{r}
 applications_selected <- applications_selected %>%
   group_by(examiner_id) %>%
@@ -343,9 +343,12 @@ applications_selected <- applications_selected %>%
 applications_selected
 ```
 
+Not sure what we are expected to create here: some employees change art unit multiple times in one quarter (most likely because they have multiple ongoing projects). However, summing them would make the "indicator" greater than one. Yet, this sum should indicate how many times one moved art unit in one quarter.
+
+### Some other cleaning
 
 ```{r}
-# drop columns
+# drop columns: assumed we don't need them anymore
 applications_selected <- applications_selected %>%
   select(-c(max_quarter_examiner, earliest_date, latest_date, tc))
 
@@ -363,14 +366,8 @@ Create a quarterly aggregated panel dataset
 -> next file
 
 
-
-
 ```{r save-file}
 write_feather(applications_selected, paste0(data_path,"app_applications_starter_coded2.feather"))
 ```
 ```
 
-1: single variable analysis
-2: correlation
-3: some interaction analysis
-4: regression

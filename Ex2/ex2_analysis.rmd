@@ -20,7 +20,7 @@ df <- read_feather(paste0(data_path,"app_applications_starter_coded2.feather"))
 
 ### Create a quarterly aggregated panel dataset
 - how do we aggregate columns like number of race in art unit? because some examiner changes art unit within each quarter
-- again how should we deal with art unit column?
+- again how should we deal with art unit columns?
 
 
 ```{r}
@@ -29,6 +29,10 @@ indi_attributes <- df %>%
   select(gender, race, examiner_id) %>%
   distinct(examiner_id, .keep_all = TRUE)
 ```
+
+
+
+### Aggreagate the data by quarter
 ```{r}
 
 df_quarter <- df %>%
@@ -53,6 +57,8 @@ df_quarter
 
 ```
 
+
+### Merge the individual level data with the quarterly aggregated data
 ```{r}
 # merge individual level data with quarterly aggregated data
 df_quarter <- df_quarter %>%
@@ -60,6 +66,7 @@ df_quarter <- df_quarter %>%
 ```
 
 
+### Change the data types
 ```{r}
 
 df_quarter <- df_quarter %>%
@@ -77,11 +84,12 @@ df_quarter <- df_quarter %>%
 
 ```
 
-
+### Check NA and drop them
 ```{r}
 # colsum na
-colSums(is.na(df))
+colSums(is.na(df_quarter))
 ```
+
 
 ```{r}
 # drop na
@@ -148,10 +156,10 @@ df_quarter %>%
         )
 ```
 
-
+### create dataset for each analysis
 ```{r}
 # for turnover analysis
-df_turn <- df_quarter %>% select(-au_move_indicator)
+df_turn <- df_quarter
 df_mobi <- df_quarter %>% select(-separation_indicator)
 ```
 
@@ -169,67 +177,128 @@ df_turn <- df_turn %>%
 ```
 
 ```{r}
-separation_model <- glm(formula = separation_indicator ~ time + new_applications + ISSUED_applications +
-  total_abn_applications + total_PEN_applications + gender + race +
-  women_in_art_unit + Asian_in_art_unit + Black_in_art_unit +
-  Other_in_art_unit + White_in_art_unit,
-                        family = binomial(link = "logit"), data = df_turn)
+# How many examiners are in the data?
+length(unique(df_turn$examiner_id))
+# How many quarters are in the data?
+length(unique(df_turn$quarter))
+```
+
+
+
+```{r}
+# Model with time fixed effects
+separation_model <- glm(separation_indicator ~ time + au_move_indicator + new_applications + ISSUED_applications + total_abn_applications + total_PEN_applications + gender + race + women_in_art_unit + Asian_in_art_unit + Black_in_art_unit + Other_in_art_unit + White_in_art_unit, family = binomial(link = "logit"), data = df_turn)
 
 summary(separation_model)
 ```
 
-| Variable               | Odds Change (%) | Significance |
-|------------------------|-----------------|--------------|
-| (Intercept)            | -66.52%         | ***          |
-| time                   | 2.44%           | ***          |
-| new_applications       | 3.22%           | ***          |
-| ISSUED_applications    | -0.35%          | *            |
-| total_abn_applications | 2.69%           | ***          |
-| genderfemale           | 7.02%           | ***          |
-| raceAsian              | -0.48%          |              |
-| raceblack              | 7.94%           | **           |
-| raceHispanic           | -21.42%         | ***          |
-| raceother              | -37.28%         | *            |
-| women_in_art_unit      | 4.44%           | ***          |
-| Asian_in_art_unit      | -2.12%          | ***          |
-| Black_in_art_unit      | 14.18%          | ***          |
-| Other_in_art_unit      | 25.74%          | ***          |
-| White_in_art_unit      | 0.49%           | ***          |
+
+**Adding fixed effects with dummies might be computationally hard**
+**I don't know how to do fixed effects for non-linear like logit**
+
+
+- Control for Time-Specific Effects: By including time dummies (e.g., for each quarter), you control for any unobserved variables that vary over time but are constant across entities (examiners). This might include factors like policy changes, economic trends, seasonal effects, or other time-related influences.
+```{r}
+# Assuming df_turn already has 'quarter' as a factor
+df_turn$quarter <- factor(df_turn$quarter)
+
+# Model with time fixed effects
+separation_model <- glm(separation_indicator ~ time + au_move_indicator + new_applications + ISSUED_applications + total_abn_applications + total_PEN_applications + gender + race + women_in_art_unit + Asian_in_art_unit + Black_in_art_unit + Other_in_art_unit + White_in_art_unit + model.matrix(~ quarter - 1, data = df_turn), family = binomial(link = "logit"), data = df_turn)
+
+summary(separation_model)
+```
+
+
+### Without Time Dummies
+| Variable               | Coefficient | Significance |
+|------------------------|-------------|--------------|
+| Intercept              | -1.0953294  | ***          |
+| time                   | 0.0240507   | ***          |
+| au_move_indicator      | -0.0012826  |              |
+| new_applications       | 0.0317154   | ***          |
+| ISSUED_applications    | -0.0033750  | .            |
+| total_abn_applications | 0.0267939   | ***          |
+| total_PEN_applications | NA          | NA           |
+| genderfemale           | 0.0677485   | ***          |
+| raceAsian              | -0.0047479  |              |
+| raceblack              | 0.0764690   | **           |
+| raceHispanic           | -0.2409096  | ***          |
+| raceother              | -0.4673176  | *            |
+| women_in_art_unit      | 0.0434395   | ***          |
+| Asian_in_art_unit      | -0.0212711  | ***          |
+| Black_in_art_unit      | 0.1326289   | ***          |
+| Other_in_art_unit      | 0.2296540   | ***          |
+| White_in_art_unit      | 0.0049194   | ***          |
+
+
+### With Time Dummies
+| Variable            | Coefficient | Significance |
+|---------------------|-------------|--------------|
+| Intercept           | 2.842e+11   |              |
+| time                | 0.02405     | ***          |
+| au_move_indicator   | -0.0012826  |              |
+| new_applications    | 0.0317154   | ***          |
+| ISSUED_applications | -0.0033750  |              |
+| total_abn_applications | 0.0267939 | ***          |
+| total_PEN_applications | NA        | NA           |
+| genderfemale        | 0.0677485   | ***          |
+| raceAsian           | -0.009352   |              |
+| raceblack           | 0.0764690   | **           |
+| raceHispanic        | -0.2490906  | ***          |
+| raceother           | -0.4673176  | *            |
+| women_in_art_unit   | 0.0434395   | ***          |
+| Asian_in_art_unit   | -0.0212711  | ***          |
+| Black_in_art_unit   | 0.1326289   | ***          |
+| Other_in_art_unit   | 0.2296540   | ***          |
+| White_in_art_unit   | 0.0049194   | ***          |
+
+
+
 
 
 
 ### Run regression for mobility analysis
+
+The Poisson model is appropriate when your response variable represents count data and you expect the variance to be equal to the mean (a key assumption of the Poisson distribution). If the variance significantly exceeds the mean, a negative binomial model might be more appropriate.
+
 ```{r}
-poisson_model <- glm(au_move_indicator ~ new_applications + ISSUED_applications +
-  total_abn_applications + tenure_days + gender + race +
-  women_in_art_unit + Asian_in_art_unit + Black_in_art_unit +
-  Other_in_art_unit + White_in_art_unit,
-                     family = poisson(link = "log"), data = df_mobi)
-
-# Output the summary of the model
-summary(poisson_model)
-
+# check the assumption
+mean(df_mobi$au_move_indicator)
+var(df_mobi$au_move_indicator)
 ```
 
 
-| Variable               | Coefficient | Significance |
-|------------------------|-------------|--------------|
-| (Intercept)            | -0.9738     | ***          |
-| new_applications       | -0.2119     | ***          |
-| ISSUED_applications    | 0.2654      | ***          |
-| total_abn_applications | 0.2903      | ***          |
-| tenure_days            | -0.00000001374 |            |
-| genderfemale           | 0.02627     | *            |
-| raceAsian              | 0.004703    |              |
-| raceblack              | 0.03038     | *            |
-| raceHispanic           | 0.02152     |              |
-| raceother              | -0.2855     | **           |
-| women_in_art_unit      | 0.03679     | ***          |
-| Asian_in_art_unit      | 0.03854     | ***          |
-| Black_in_art_unit      | -0.01555    | ***          |
-| Other_in_art_unit      | 0.2900      | ***          |
-| White_in_art_unit      | 0.01567     | ***          |
+```{r}
+# au_move_indicator hist
+hist(df_mobi$au_move_indicator, breaks = 50)
+```
 
-A rate ratio greater than 1 indicates an increased rate of the au_move_indicator with each additional unit of the variable. For example, a rate ratio of 1.304 for ISSUED_applications means each additional issued application is associated with a 30.40% increase in the rate of moving.
-A rate ratio less than 1 indicates a decreased rate. For example, a rate ratio of 0.809 for new_applications means each additional new application is associated with a 19.10% decrease in the rate of moving.
-The percentage change gives an idea of how much the rate increases or decreases in percentage terms for each unit increase in the variable.
+
+```{r}
+library(plm)
+# Convert the data frame to a pdata.frame, specifying the index for entity and time
+pdata <- pdata.frame(df_mobi, index = c("examiner_id", "quarter"))
+
+# Fit the fixed effects model
+fe_model <- plm(au_move_indicator ~ new_applications + ISSUED_applications +
+  total_abn_applications + tenure_days + gender + race +
+  women_in_art_unit + Asian_in_art_unit + Black_in_art_unit +
+  Other_in_art_unit + White_in_art_unit,
+                data = pdata, model = "within")
+
+summary(fe_model)
+```
+
+
+- you can see that time-invarient variables are dropped because they are not informative in the fixed effects model (gneder, race, tenure days...)
+
+| Variable             | Coefficient | Significance |
+|----------------------|-------------|--------------|
+| new_applications     | -0.00030712 |              |
+| ISSUED_applications  | 0.08934460  | ***          |
+| total_abn_applications | 0.24136075 | ***          |
+| women_in_art_unit    | -0.00051123 |              |
+| Asian_in_art_unit    | 0.01950606  | ***          |
+| Black_in_art_unit    | 0.07589236  | ***          |
+| Other_in_art_unit    | 0.20590610  | **           |
+| White_in_art_unit    | 0.07331964  | ***          |
