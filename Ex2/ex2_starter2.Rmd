@@ -1,10 +1,9 @@
 ---
 title: "Exercise 2 starter"
-output: github_document
+output: md_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 library(arrow)
@@ -186,7 +185,7 @@ gc()
 
 Save file as processed variables, to skip these steps in the following exercises.
 
-```{r save-file}
+```{r}
 write_feather(applications, paste0(data_path,"app_data_starter_coded.feather"))
 ```
 
@@ -366,7 +365,7 @@ Create a quarterly aggregated panel dataset
 -> next file
 
 
-```{r save-file}
+```{r}
 write_feather(applications_selected, paste0(data_path,"app_applications_starter_coded2.feather"))
 ```
 ```

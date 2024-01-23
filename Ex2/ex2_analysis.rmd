@@ -1,6 +1,5 @@
 ---
-title: "R Notebook"
-output: github_document
+title: "Talent Analytics Group 4 - Ex2 - Regression
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
