@@ -13,7 +13,7 @@
         <entry key="file://$PROJECT_DIR$/Ex2/ex2_analysis.rmd">
           <value>
             <RMarkdownRenderProfile>
-              <option name="lastOutput" value="$PROJECT_DIR$/Ex2/ex2_analysis.md" />
+              <option name="lastOutput" value="$PROJECT_DIR$/Ex2/ex2_analysis.pdf" />
               <option name="outputDirectoryUrl" value="file://$PROJECT_DIR$/Ex2" />
             </RMarkdownRenderProfile>
           </value>
@@ -28,7 +28,7 @@
         <entry key="file://$PROJECT_DIR$/Ex2/ex2_starter2.Rmd">
           <value>
             <RMarkdownRenderProfile>
-              <option name="lastOutput" value="$PROJECT_DIR$/Ex2/ex2_starter2.md" />
+              <option name="lastOutput" value="$PROJECT_DIR$/Ex2/ex2_starter2.pdf" />
               <option name="outputDirectoryUrl" value="file://$PROJECT_DIR$/Ex2" />
             </RMarkdownRenderProfile>
           </value>

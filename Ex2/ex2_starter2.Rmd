@@ -1,6 +1,6 @@
 ---
 title: "Exercise 2 starter"
-output: md_document
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}

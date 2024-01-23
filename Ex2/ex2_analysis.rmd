@@ -1,6 +1,8 @@
 ---
-title: "Talent Analytics Group 4 - Ex2 - Regression
+title: "Exercise 2 regression"
+output: pdf_document
 ---
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)

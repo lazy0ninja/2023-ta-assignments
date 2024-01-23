@@ -570,25 +570,51 @@ summary(separation_model)
 
 ### With Time Dummies
 
-| Variable               | Coefficient | Significance |
-|------------------------|-------------|--------------|
-| Intercept              | 2.842e+11   |              |
-| time                   | 0.02405     | \*\*\*       |
-| au_move_indicator      | -0.0012826  |              |
-| new_applications       | 0.0317154   | \*\*\*       |
-| ISSUED_applications    | -0.0033750  |              |
-| total_abn_applications | 0.0267939   | \*\*\*       |
-| total_PEN_applications | NA          | NA           |
-| genderfemale           | 0.0677485   | \*\*\*       |
-| raceAsian              | -0.009352   |              |
-| raceblack              | 0.0764690   | \*\*         |
-| raceHispanic           | -0.2490906  | \*\*\*       |
-| raceother              | -0.4673176  | \*           |
-| women_in_art_unit      | 0.0434395   | \*\*\*       |
-| Asian_in_art_unit      | -0.0212711  | \*\*\*       |
-| Black_in_art_unit      | 0.1326289   | \*\*\*       |
-| Other_in_art_unit      | 0.2296540   | \*\*\*       |
-| White_in_art_unit      | 0.0049194   | \*\*\*       |
+| Variable                | Coefficient | Significance |
+|-------------------------|-------------|--------------|
+| Intercept               | 2.842e+11   |              |
+| time                    | 2.083e-02   | ***          |
+| au_move_indicator       | -5.581e-03  | *            |
+| new_applications        | 3.757e-02   | ***          |
+| ISSUED_applications     | -2.726e-03  |              |
+| total_abn_applications  | 2.313e-02   | ***          |
+| total_PEN_applications  | NA          | NA           |
+| genderfemale            | 7.640e-02   | ***          |
+| raceAsian               | -9.352e-03  |              |
+| raceblack               | 7.966e-02   | **           |
+| raceHispanic            | -2.520e-01  | ***          |
+| raceother               | -4.569e-01  | *            |
+| women_in_art_unit       | 4.746e-02   | ***          |
+| Asian_in_art_unit       | -2.057e-02  | ***          |
+| Black_in_art_unit       | 1.306e-01   | ***          |
+| Other_in_art_unit       | 2.242e-01   | ***          |
+| White_in_art_unit       | 4.169e-03   | ***          |
+
+
+Time Variable:
+
+Without Time Dummies: The time coefficient is positive and highly significant, indicating a strong relationship between time and the au_move_indicator.
+With Time Dummies: The time coefficient remains positive and highly significant, but the significance of time might be absorbed by the time dummies.
+au_move_indicator:
+
+Without Time Dummies: This predictor is not significant.
+With Time Dummies: It becomes significant with a negative coefficient, suggesting that controlling for time changes the impact of the au_move_indicator.
+new_applications:
+
+The coefficient is positive and remains highly significant in both models, indicating a consistent relationship with the au_move_indicator.
+ISSUED_applications:
+
+Without Time Dummies: The effect is negative and marginally significant (denoted by '.').
+With Time Dummies: The variable is not significant.
+total_abn_applications:
+
+The relationship is positive and highly significant in both models, which implies that the number of total abnormal applications consistently affects the au_move_indicator.
+Gender and Race Variables:
+
+The coefficients for genderfemale, raceblack, raceHispanic, raceother, and the demographic compositions of the art unit are statistically significant in both models.
+The significance and direction of the coefficients are mostly consistent, suggesting robust effects across both models.
+
+
 
 ### Run regression for mobility analysis
 
