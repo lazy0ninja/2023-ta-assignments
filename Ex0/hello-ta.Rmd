@@ -1,0 +1,27 @@
+---
+title: "Hello TA"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load "tidyverse" and "igraph"
+
+Hello, TA!
+
+```{r }
+library(tidyverse)
+library(igraph)
+```
+
+
+adding test code
+
+```{r }
+x <- 1:10
+y <- 1:10
+plot(x,y)
+```
+```

@@ -1,0 +1,235 @@
+---
+title: "R Notebook"
+output: github_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(arrow)
+
+
+```
+
+```{r}
+# Read in the data
+data_path <- "/Users/kaz/Desktop/MMA - WINTER Code/"
+df <- read_feather(paste0(data_path,"app_applications_starter_coded2.feather"))
+```
+
+
+### Create a quarterly aggregated panel dataset
+- how do we aggregate columns like number of race in art unit? because some examiner changes art unit within each quarter
+- again how should we deal with art unit column?
+
+
+```{r}
+# individual level data
+indi_attributes <- df %>%
+  select(gender, race, examiner_id) %>%
+  distinct(examiner_id, .keep_all = TRUE)
+```
+```{r}
+
+df_quarter <- df %>%
+        group_by(examiner_id, quarter) %>%
+        summarize(
+                new_applications = mean(new_applications, na.rm = TRUE),
+                ISSUED_applications = mean(ISSUED_applications, na.rm = TRUE),
+                total_abn_applications = mean(abn_applications, na.rm = TRUE),
+                total_PEN_applications = mean(PEN_applications, na.rm = TRUE),
+                tenure_days = mean(tenure_days, na.rm = TRUE),
+                women_in_art_unit = mean(women_in_art_unit, na.rm = TRUE),
+                Asian_in_art_unit = mean(Asian_in_art_unit, na.rm = TRUE),
+                Black_in_art_unit = mean(Black_in_art_unit, na.rm = TRUE),
+                Other_in_art_unit = mean(Other_in_art_unit, na.rm = TRUE),
+                White_in_art_unit = mean(White_in_art_unit, na.rm = TRUE),
+                separation_indicator = mean(separation_indicator, na.rm = TRUE),
+                au_move_indicator = sum(au_move_indicator, na.rm = TRUE)
+        )
+
+df_quarter
+
+
+```
+
+```{r}
+# merge individual level data with quarterly aggregated data
+df_quarter <- df_quarter %>%
+        left_join(indi_attributes, by = "examiner_id")
+```
+
+
+```{r}
+
+df_quarter <- df_quarter %>%
+        mutate(
+                examiner_id = as.integer(examiner_id),
+                quarter = as.character(quarter),  # or you could separate into year and quarter
+                tenure_days = as.numeric(tenure_days),  # Assuming you keep the .x column
+                separation_indicator = as.factor(separation_indicator),
+                au_move_indicator = as.integer(au_move_indicator),
+                gender = as.factor(gender),
+                race = as.factor(race)
+        )
+
+# Now check the structure of the dataframe to confirm changes
+
+```
+
+
+```{r}
+# colsum na
+colSums(is.na(df))
+```
+
+```{r}
+# drop na
+df_quarter <- df_quarter %>%
+        drop_na()
+```
+
+```{r}
+# colsum na
+colSums(is.na(df_quarter))
+dim(df_quarter)
+```
+
+
+
+
+
+### to-do
+1: single variable analysis
+2: correlation
+3: some interaction analysis
+4: regression
+
+### Explatory Data Analysis
+
+```{r}
+df_unique <- df_quarter %>%
+        distinct(examiner_id, .keep_all = TRUE)
+
+# Now create the gender and race distribution tables
+gender_distribution <- table(df_unique$gender)
+race_distribution <- table(df_unique$race)
+
+# Print the distributions
+print(gender_distribution)
+print(race_distribution)
+```
+
+```{r}
+# col wise na sum
+colSums(is.na(df_quarter))
+```
+
+```{r}
+# drop if quarter is 2017/2
+df_quarter <- df_quarter %>%
+        filter(quarter != "2017/2")
+
+# largest quarter
+max(df_quarter$quarter)
+```
+
+```{r}
+# modify separation indicator
+# for each examiner, make the last quarter's separation indicator as 1 and the rest as 0
+df_quarter %>%
+        group_by(examiner_id) %>%
+        mutate(
+                separation_indicator = ifelse(
+                        quarter == max(quarter),
+                        1,
+                        0
+                )
+        )
+```
+
+
+```{r}
+# for turnover analysis
+df_turn <- df_quarter %>% select(-au_move_indicator)
+df_mobi <- df_quarter %>% select(-separation_indicator)
+```
+
+### Run regression for turnover analysis
+- time is a variable we created to represent the time period for each observation. It allows the model to account for the time until separation.
+-
+```{r}
+# regression for turnover analysis
+df_turn <- df_turn %>%
+  group_by(examiner_id) %>%
+  arrange(quarter) %>%
+  mutate(time = row_number()) %>%
+  ungroup()
+
+```
+
+```{r}
+separation_model <- glm(formula = separation_indicator ~ time + new_applications + ISSUED_applications +
+  total_abn_applications + total_PEN_applications + gender + race +
+  women_in_art_unit + Asian_in_art_unit + Black_in_art_unit +
+  Other_in_art_unit + White_in_art_unit,
+                        family = binomial(link = "logit"), data = df_turn)
+
+summary(separation_model)
+```
+
+| Variable               | Odds Change (%) | Significance |
+|------------------------|-----------------|--------------|
+| (Intercept)            | -66.52%         | ***          |
+| time                   | 2.44%           | ***          |
+| new_applications       | 3.22%           | ***          |
+| ISSUED_applications    | -0.35%          | *            |
+| total_abn_applications | 2.69%           | ***          |
+| genderfemale           | 7.02%           | ***          |
+| raceAsian              | -0.48%          |              |
+| raceblack              | 7.94%           | **           |
+| raceHispanic           | -21.42%         | ***          |
+| raceother              | -37.28%         | *            |
+| women_in_art_unit      | 4.44%           | ***          |
+| Asian_in_art_unit      | -2.12%          | ***          |
+| Black_in_art_unit      | 14.18%          | ***          |
+| Other_in_art_unit      | 25.74%          | ***          |
+| White_in_art_unit      | 0.49%           | ***          |
+
+
+
+### Run regression for mobility analysis
+```{r}
+poisson_model <- glm(au_move_indicator ~ new_applications + ISSUED_applications +
+  total_abn_applications + tenure_days + gender + race +
+  women_in_art_unit + Asian_in_art_unit + Black_in_art_unit +
+  Other_in_art_unit + White_in_art_unit,
+                     family = poisson(link = "log"), data = df_mobi)
+
+# Output the summary of the model
+summary(poisson_model)
+
+```
+
+
+| Variable               | Coefficient | Significance |
+|------------------------|-------------|--------------|
+| (Intercept)            | -0.9738     | ***          |
+| new_applications       | -0.2119     | ***          |
+| ISSUED_applications    | 0.2654      | ***          |
+| total_abn_applications | 0.2903      | ***          |
+| tenure_days            | -0.00000001374 |            |
+| genderfemale           | 0.02627     | *            |
+| raceAsian              | 0.004703    |              |
+| raceblack              | 0.03038     | *            |
+| raceHispanic           | 0.02152     |              |
+| raceother              | -0.2855     | **           |
+| women_in_art_unit      | 0.03679     | ***          |
+| Asian_in_art_unit      | 0.03854     | ***          |
+| Black_in_art_unit      | -0.01555    | ***          |
+| Other_in_art_unit      | 0.2900      | ***          |
+| White_in_art_unit      | 0.01567     | ***          |
+
+A rate ratio greater than 1 indicates an increased rate of the au_move_indicator with each additional unit of the variable. For example, a rate ratio of 1.304 for ISSUED_applications means each additional issued application is associated with a 30.40% increase in the rate of moving.
+A rate ratio less than 1 indicates a decreased rate. For example, a rate ratio of 0.809 for new_applications means each additional new application is associated with a 19.10% decrease in the rate of moving.
+The percentage change gives an idea of how much the rate increases or decreases in percentage terms for each unit increase in the variable.
