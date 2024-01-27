@@ -1,6 +1,6 @@
 ---
 title: "R Notebook"
-output github_document
+output md_document
 ---
 
 #### Load the lib and data
@@ -11,7 +11,7 @@ library(lubridate)
 library(arrow)
 ```
 ```{r}
-data_path <- "/Users/kaz/Desktop/MMA - WINTER Code/Talent_data/app_data_starter.feather"
+data_path <- "/Users/kaz/Desktop/MMA - WINTER Code/Talent_data/app_data_starter.feather" # change this to your path
 applications <- arrow::read_feather(data_path)
 ```
 
