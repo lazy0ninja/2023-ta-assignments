@@ -1,0 +1,30 @@
+---
+title: "R Notebook"
+output: md_document
+---
+
+
+#### load libraries and data
+
+```{r}
+library(tidyverse)
+library(arrow)
+library(lubridate)
+```
+
+```{r}
+df <- arrow::read_feather("/Users/kaz/Desktop/MMA - WINTER Code/Talent_data/panel_df.feather")
+
+```
+
+
+#### EDA
+```{r}
+# target variable - separation_indicator
+# count the number of 1
+table(df$separation_indicator)
+
+# number of unique employees
+length(unique(df$examiner_id))
+```
+
