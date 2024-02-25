@@ -1,0 +1,228 @@
+---
+title: "Talent Analytics Exercise 3 - Prediction"
+output: 
+  github_document: default
+  pdf_document:
+    latex_engine: xelatex
+  md_document: default
+geometry: margin=1in
+date: "2024-01-29"
+---
+
+The first few sections of this markdown document reiterates the processing steps highlighted in Exercise 2 with some improvments to the code. For details on Exercise 3, skip to page 8 for the regression analysis.
+
+# Initialisation of libraries and dataset
+
+## Import Libraries
+```{r Setup}
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), format='latex', echo=TRUE)
+library(tidyverse)
+library(lubridate)
+library(arrow)
+```
+
+## Import Dataset
+
+```{r Import Dataset}
+data_path <- "/Users/kaz/Desktop/MMA - WINTER Code/Talent_data/final_project.feather" # change this to your path
+df <- arrow::read_feather(data_path)
+```
+
+
+## Select Relevant Columns
+```{r}
+# Select relevant columns
+df <- df %>%
+        select(-c(most_freq_examiner_art_unit, women_in_art_unit_mean, Asian_in_art_unit_mean,
+                  Black_in_art_unit_mean, Hispanic_in_art_unit_mean, White_in_art_unit_mean,
+                  Other_in_art_unit_mean))
+```
+
+```{r}
+str(df)
+```
+
+
+## Final Data preparation
+```{r}
+
+```
+
+
+
+
+
+
+
+# Prediction Model (Exercise 3)
+Our logistic regression model takes the data aggregated by examiner_id
+
+
+## Training and Testing Logistic Regression Model
+The model is trained with 80% of the data, holding 20% of the data as the test set.The model takes in features such as number of new applications, number of issued applications, total applications abandoned and tenure days to predict turnover.
+```{r Training and Testing Logistic Regression Predictive Model, message=FALSE, warning=FALSE}
+library(caret)
+library(ROCR)
+library(gtsummary)
+
+# Create a subset of the panel_df without some columns
+data <- subset(df, select = -c(examiner_id))
+
+# Split data into training and testing sets
+set.seed(123) # for reproducibility
+trainingIndex <- createDataPartition(data$separation_indicator_sum, p = .8, list = FALSE)
+trainingData <- data[trainingIndex,]
+testingData <- data[-trainingIndex,]
+
+
+
+# trainingData$tenure_days_scaled <- scale(trainingData$tenure_days)
+# trainingData$start_year_scaled <- scale(trainingData$start_year)
+# trainingData$new_applications_mean_scaled <- scale(trainingData$new_applications_mean)
+# trainingData$ISSUED_applications_mean_scaled <- scale(trainingData$ISSUED_applications_mean)
+# trainingData$abn_applications_mean_scaled <- scale(trainingData$abn_applications_mean)
+# trainingData$PEN_applications_mean_scaled <- scale(trainingData$PEN_applications_mean)
+# trainingData$au_move_indicator_sum_scaled <- scale(trainingData$au_move_indicator_sum)
+# trainingData$avg_num_in_art_unit_scaled <- scale(trainingData$avg_num_in_art_unit)
+# trainingData$avg_woman_ratio_scaled <- scale(trainingData$avg_woman_ratio)
+# trainingData$avg_minority_ratio_scaled <- scale(trainingData$avg_minority_ratio)
+# trainingData$own_race_ratio_scaled <- scale(trainingData$own_race_ratio)
+```
+
+
+
+
+```{r Training and Testing Logistic Regression Predictive Model, message=FALSE, warning=FALSE}
+
+
+# Train logistic regression model and print results
+# Model 1: Initial model with basic variables
+model1 <- glm(separation_indicator_sum ~ gender + race + tenure_days + start_year, data = trainingData, family = binomial())
+# Model 2: Model with initial variables + average application varibales
+model2 <- glm(separation_indicator_sum ~ gender + race + tenure_days + start_year +  new_applications_mean + ISSUED_applications_mean + abn_applications_mean + PEN_applications_mean, data = trainingData, family = binomial())
+# Model 3: Model with initial variables + average application varibales + art unit information
+model3 <- glm(separation_indicator_sum ~ gender + race + tenure_days + start_year + new_applications_mean + ISSUED_applications_mean + abn_applications_mean + PEN_applications_mean + au_move_indicator_sum + avg_num_in_art_unit + avg_woman_ratio + avg_minority_ratio + own_race_ratio, data = trainingData, family = binomial())
+
+# Model 4: Model with initial variables + average application varibales + art unit information + examiner information + interaction terms
+model4 <- glm(separation_indicator_sum ~ gender + race + tenure_days + start_year + new_applications_mean + ISSUED_applications_mean + abn_applications_mean + PEN_applications_mean + au_move_indicator_sum + avg_num_in_art_unit + avg_woman_ratio + avg_minority_ratio + own_race_ratio +
+        gender * avg_woman_ratio +
+        gender * avg_minority_ratio,
+              data = trainingData,
+              family = binomial())
+
+```
+
+## Create Model Summary
+
+```{r}
+library(stargazer)
+stargazer(model1, model2, model3, model4, type = "html",
+          title = "Comparative Logistic Regression Model Summary",
+          out = "model_summary_comparison.txt")
+
+```
+
+```{r}
+model_summary1 <- tbl_regression(model1)
+model_summary2 <- tbl_regression(model2)
+model_summary3 <- tbl_regression(model3)
+model_summary4 <- tbl_regression(model4)
+
+# Combine the summaries into one table
+model_summaries_combined <- tbl_merge(
+        list(model_summary1, model_summary2, model_summary3, model_summary4),
+        tab_spanner = c("Model 1", "Model 2", "Model 3", "Model 4")
+)
+
+# Print the combined table
+model_summaries_combined
+```
+
+
+
+
+
+
+
+## Predict on testing set
+```{r}
+actualClasses <- testingData$separation_indicator_sum
+
+
+# Model 1 Predictions and Preparation for ROC Analysis
+predictions1 <- predict(model1, newdata = testingData, type = 'response')
+predictionScores1 <- prediction(predictions1, actualClasses)
+
+# Model 2 Predictions and Preparation for ROC Analysis
+predictions2 <- predict(model2, newdata = testingData, type = 'response')
+predictionScores2 <- prediction(predictions2, actualClasses)
+
+# Model 3 Predictions and Preparation for ROC Analysis
+predictions3 <- predict(model3, newdata = testingData, type = 'response')
+predictionScores3 <- prediction(predictions3, actualClasses)
+
+# Model 4 Predictions and Preparation for ROC Analysis
+predictions4 <- predict(model4, newdata = testingData, type = 'response')
+predictionScores4 <- prediction(predictions4, actualClasses)
+
+```
+
+## Plotting ROC Curve
+```{r Plot ROC, echo=FALSE}
+# Calculate performance metrics for ROC curve
+perf1 <- performance(predictionScores1, "tpr", "fpr")
+perf2 <- performance(predictionScores2, "tpr", "fpr")
+perf3 <- performance(predictionScores3, "tpr", "fpr")
+perf4 <- performance(predictionScores4, "tpr", "fpr")
+
+# Plot ROC curve for all models
+plot(perf1, col="red", main="ROC Curves for All Models", percent=TRUE)
+par(new=TRUE)
+plot(perf2, col="blue", percent=TRUE, add=TRUE)
+par(new=TRUE)
+plot(perf3, col="green", percent=TRUE, add=TRUE)
+par(new=TRUE)
+plot(perf4, col="purple", percent=TRUE, add=TRUE)
+
+# Add legend
+legend("bottomright", legend=c("Model 1", "Model 2", "Model 3", "Model 4"),
+       col=c("red", "blue", "green", "purple"), lwd=2)
+```
+
+```{r Calulating AUC}
+# Calculate AUC
+perf1 <- performance(predictionScores1, "auc")
+auc1 <- perf1@y.values[[1]]
+print(paste("AUC for Model 1:", auc1))
+# Repeat for other models as necessary
+perf2 <- performance(predictionScores2, "auc")
+auc2 <- perf2@y.values[[1]]
+print(paste("AUC for Model 2:", auc1))
+
+# Calculating AUC for Model 3
+perf3 <- performance(predictionScores3, "auc")
+auc3 <- perf3@y.values[[1]]
+print(paste("AUC for Model 3:", auc3))
+
+# Calculating AUC for Model 4
+perf4 <- performance(predictionScores4, "auc")
+auc4 <- perf4@y.values[[1]]
+print(paste("AUC for Model 4:", auc4))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+## Results and Discussion - please change this
+Of the different features, number of new_applications, issued applications, total abandoned applications and tenure days are highly significant in predicting turnover with a small p-value (<0.001). The negative log(OR) value suggests that higher values of this predictor are associated with lower odds of the outcome occurring (i.e. lower probability of turnover). The other features are less significant in predicting turnover rates.
+
+## Recommendations  - please change this
+This model, with an AUC value close to 1, is very good at identifying which employees might leave the company. It suggests that if an examiner processes fewer applications in a quarter, they might be thinking about leaving. This drop in applications could mean the examiner is less motivated and not working as much. So, the company can use the number of applications an examiner handles as a sign to see if they might quit. If they notice an examiner with fewer applications, they can act early to try and keep them, especially if keeping an employee is cheaper than hiring a new one.

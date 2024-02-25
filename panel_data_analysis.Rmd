@@ -1,0 +1,128 @@
+---
+title: "Talent Analytics Exercise 3 - Panel Prediction"
+output: 
+  github_document: default
+  pdf_document:
+    latex_engine: xelatex
+  md_document: default
+geometry: margin=1in
+date: "2024-01-29"
+---
+
+The first few sections of this markdown document reiterates the processing steps highlighted in Exercise 2 with some improvments to the code. For details on Exercise 3, skip to page 8 for the regression analysis.
+
+# Initialisation of libraries and dataset
+
+## Import Libraries
+```{r Setup}
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), format='latex', echo=TRUE)
+library(tidyverse)
+library(lubridate)
+library(arrow)
+```
+
+## Import Dataset
+
+```{r Import Dataset}
+data_path <- "/Users/kaz/Desktop/MMA - WINTER Code/Talent_data/panel_df.feather" # change this to your path
+df <- arrow::read_feather(data_path)
+```
+
+
+## Select Relevant Columns
+```{r}
+# Select relevant columns
+df <- df %>%
+        select(-c(max_quarter_examiner))
+```
+
+```{r}
+str(df)
+```
+
+
+## EDA
+```{r}
+eda <- arrow::read_feather("/Users/kaz/Desktop/MMA - WINTER Code/Talent_data/final_project.feather")
+```
+
+```{r}
+
+
+library(DataExplorer)
+plot_intro(eda)
+create_report(eda)
+```
+
+
+
+
+
+
+
+# Prediction Model (Exercise 3)
+Our logistic regression model takes the data aggregated by examiner_id
+
+
+## FE model
+```{r Training and Testing Logistic Regression Predictive Model, message=FALSE, warning=FALSE}
+library(plm)
+pdata <- pdata.frame(df, index = c("examiner_id", "quarter"))
+
+# Fit the fixed effects model
+fe_model <- plm(separation_indicator ~ new_applications + ISSUED_applications +
+        abn_applications + PEN_applications + women_in_art_unit +
+        Asian_in_art_unit + Black_in_art_unit + Hispanic_in_art_unit +
+        Other_in_art_unit + White_in_art_unit + gender + race +
+        tenure_days + au_move_indicator + au_size +
+        woman_ratio + minority_ratio + own_race_ratio,
+                data = pdata, index = c("examiner_id", "quarter"), model = "within")
+
+summary(fe_model)
+```
+
+
+
+
+
+```{r}
+fe_model_int <- plm(separation_indicator  ~ new_applications + ISSUED_applications +
+        abn_applications + PEN_applications + women_in_art_unit +
+        Asian_in_art_unit + Black_in_art_unit + Hispanic_in_art_unit +
+        Other_in_art_unit + White_in_art_unit + gender + race +
+        tenure_days + au_move_indicator + au_size +
+        woman_ratio + minority_ratio + own_race_ratio +
+        gender:woman_ratio + race:minority_ratio + race:own_race_ratio,
+                       data = pdata, index = c("examiner_id", "quarter"), model = "within")
+
+# Summary of the linear model with interaction terms
+summary(fe_model_int)
+```
+
+
+
+```{r}
+library(stargazer)
+# Create the HTML table
+stargazer(fe_model, fe_model_int, type = "html",
+          out = "/mnt/data/models_comparison.html",
+          title = "Comparison of Models",
+          align = TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+## Results and Discussion - please change this
+Of the different features, number of new_applications, issued applications, total abandoned applications and tenure days are highly significant in predicting turnover with a small p-value (<0.001). The negative log(OR) value suggests that higher values of this predictor are associated with lower odds of the outcome occurring (i.e. lower probability of turnover). The other features are less significant in predicting turnover rates.
+
+## Recommendations  - please change this
+This model, with an AUC value close to 1, is very good at identifying which employees might leave the company. It suggests that if an examiner processes fewer applications in a quarter, they might be thinking about leaving. This drop in applications could mean the examiner is less motivated and not working as much. So, the company can use the number of applications an examiner handles as a sign to see if they might quit. If they notice an examiner with fewer applications, they can act early to try and keep them, especially if keeping an employee is cheaper than hiring a new one.

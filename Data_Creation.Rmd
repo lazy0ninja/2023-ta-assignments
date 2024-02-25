@@ -1,0 +1,458 @@
+---
+title: "Talent Analytics Final Project - Data Creation"
+output: 
+  github_document: default
+  pdf_document:
+    latex_engine: xelatex
+  md_document: default
+geometry: margin=1in
+date: "2024-01-29"
+---
+
+The first few sections of this markdown document reiterates the processing steps highlighted in Exercise 2 with some improvments to the code. For details on Exercise 3, skip to page 8 for the regression analysis.
+
+# Initialisation of libraries and dataset
+
+## Import Libraries
+```{r Setup}
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), format='latex', echo=TRUE)
+library(tidyverse)
+library(lubridate)
+library(arrow)
+```
+
+## Import Dataset
+
+```{r Import Dataset}
+data_path <- "/Users/kaz/Desktop/MMA - WINTER Code/Talent_data/app_data_starter.feather" # change this to your path
+applications <- arrow::read_feather(data_path)
+
+```
+
+# Processing of dataset to include gender and race for examiners
+
+## Adding gender.y to dataset based on surnames library
+```{r Gender-related processing}
+library(gender)
+examiner_names <- applications %>%
+        distinct(examiner_name_first)
+
+examiner_names_gender <- examiner_names %>%
+        do(results = gender(.$examiner_name_first, method = "ssa")) %>%
+        unnest(cols = c(results), keep_empty = TRUE) %>%
+        select(
+                examiner_name_first = name,
+                gender,
+                proportion_female)
+
+# remove extra colums from the gender table
+examiner_names_gender <- examiner_names_gender %>%
+        select(examiner_name_first, gender)
+
+# joining gender back to the dataset
+applications <- applications %>%
+        left_join(examiner_names_gender, by = "examiner_name_first")
+
+# cleaning up
+rm(examiner_names)
+rm(examiner_names_gender)
+gc()
+```
+
+## Adding race.y to dataset using surnames library
+```{r Race-related processing}
+library(wru)
+
+examiner_surnames <- applications %>%
+        select(surname = examiner_name_last) %>%
+        distinct()
+
+examiner_race <- predict_race(voter.file = examiner_surnames, surname.only = T) %>%
+        as_tibble()
+
+examiner_race <- examiner_race %>%
+        mutate(max_race_p = pmax(pred.asi, pred.bla, pred.his, pred.oth, pred.whi)) %>%
+        mutate(race = case_when(
+                max_race_p == pred.asi ~ "Asian",
+                max_race_p == pred.bla ~ "black",
+                max_race_p == pred.his ~ "Hispanic",
+                max_race_p == pred.oth ~ "other",
+                max_race_p == pred.whi ~ "white",
+                TRUE ~ NA_character_
+        ))
+
+# removing extra columns
+examiner_race <- examiner_race %>%
+        select(surname,race)
+
+applications <- applications %>%
+        left_join(examiner_race, by = c("examiner_name_last" = "surname"))
+
+rm(examiner_race)
+rm(examiner_surnames)
+gc()
+```
+## Adding dates-related data to calculate tenure days 
+```{r Dates-related processing}
+library(lubridate) # to work with dates
+
+examiner_dates <- applications %>%
+        select(examiner_id, filing_date, appl_status_date)
+
+examiner_dates <- examiner_dates %>%
+        mutate(start_date = ymd(filing_date), end_date = as_date(dmy_hms(appl_status_date)))
+
+examiner_dates <- examiner_dates %>%
+        group_by(examiner_id) %>%
+        summarise(
+                earliest_date = min(start_date, na.rm = TRUE),
+                latest_date = max(end_date, na.rm = TRUE),
+                tenure_days = interval(earliest_date, latest_date) %/% days(1)
+        ) %>%
+        filter(year(latest_date)<2020)
+
+applications <- applications %>%
+        left_join(examiner_dates, by = "examiner_id")
+
+rm(examiner_dates)
+gc()
+```
+
+# Creating panel data
+
+## Cleaning noisy data
+
+```{r Cleaning noisy data}
+# Checking for number of unique values in categorical data
+
+cat_columns <- c("disposal_type", "race.x", "gender.x", "race.y", "gender.y")
+result_list <- lapply(cat_columns, function(col_name) {
+    counts <- table(applications[[col_name]], useNA = "ifany")
+    data.frame(Column = col_name, Value = names(counts), Count = as.integer(counts))
+})
+print(result_list)
+```
+
+## Removing NA values in gender.x
+The column gender.x and gender.y has 303859 NA values (constituting about 15% of the dataset). These values will be dropped to facilitate analysis.
+
+```{r Dropping NA values in gender.x}
+applications <- applications[!is.na(applications$gender.x), ]
+counts <- table(applications$gender.x, useNA = "ifany")
+print(counts)
+```
+## Cleaning data types - here
+
+```{r Cleaning data types}
+# Convert filing_date to Date format and create a quarter variable
+applications$filing_date <- as.Date(applications$filing_date)
+applications$quarter <- paste0(year(applications$filing_date), "/", quarter(applications$filing_date))
+
+```
+
+#### Create number of applications (New, Issues, etc.) and Race Counts by quarter
+```{r}
+# Aggregate and create a new dataframe for quarterly aggregated values
+quarterly_aggregated_values <- applications %>%
+  group_by(examiner_id, quarter, examiner_art_unit) %>%
+  summarize(
+    au_count = n(),
+    new_applications = n_distinct(application_number),
+    ISSUED_applications = sum(disposal_type == "ISS" & !duplicated(application_number)),
+    abn_applications = sum(disposal_type == "ABN" & !duplicated(application_number)),
+    PEN_applications = sum(disposal_type == "PEND" & !duplicated(application_number))
+  )
+
+# To add demographic information by art unit, assume a separate grouping is needed
+demographics_aggregated <- applications %>%
+  group_by(quarter, examiner_art_unit) %>%
+  summarize(
+    women_in_art_unit = sum(gender.y == "female" & !duplicated(examiner_id)),
+    Asian_in_art_unit = sum(race.y == "Asian" & !duplicated(examiner_id)),
+    Black_in_art_unit = sum(race.y == "black" & !duplicated(examiner_id)),
+    Hispanic_in_art_unit = sum(race.y == "Hispanic" & !duplicated(examiner_id)),
+    Other_in_art_unit = sum(race.y == "other" & !duplicated(examiner_id)),
+    White_in_art_unit = sum(race.y == "white" & !duplicated(examiner_id))
+  )
+```
+
+#### Merge the two datasets  to create a single Panel dataset
+- demographic is dependent on quarter and art unit
+- applications (ABN, New, etc) is dependent on examiner_id and quarter
+
+That is why we need to aggragete them seperately and then merge them together.
+
+```{r}
+
+merged_data <- full_join(demographics_aggregated, quarterly_aggregated_values, by = c("quarter", "examiner_art_unit"))
+# change the order
+merged_data <- merged_data %>%   select(
+  examiner_id,
+  quarter,
+  examiner_art_unit,
+  au_count,
+  new_applications,
+  ISSUED_applications,
+  abn_applications,
+  PEN_applications,
+  women_in_art_unit,
+  Asian_in_art_unit,
+  Black_in_art_unit,
+  Hispanic_in_art_unit,
+  Other_in_art_unit,
+  White_in_art_unit
+)
+```
+
+## Sorting applications by examiner and quarter and extracting individual level data (race, genderm etc.), so we can merge it with the panel data
+```{r Sort applications by examiner and quarter}
+# sort by examiner_id and quarter
+applications <- applications %>%
+        arrange(examiner_id, quarter)
+
+applications_selected <- applications %>%
+        select(
+                examiner_id,
+                ends_with(".x")  # Select columns that end with '_x'
+        ) %>%
+        rename_with(~ str_remove(., ".x"), ends_with(".x"))  # Remove the '_x' suffix
+
+
+applications_selected_unique <- applications_selected %>%
+  distinct(examiner_id, .keep_all = TRUE)
+
+```
+
+#### merge
+```{r}
+final_merged_data <- left_join(merged_data, applications_selected_unique, by = "examiner_id")
+```
+
+
+## Introducing separation and AU move indicator
+```{r Separation and AU Move Indicator}
+# find the latest time quarter for each examiner
+overall_max_quarter <- "2017/1"
+
+# filter dataset to exclude the latest quarter
+final_merged_data <- final_merged_data %>%
+        filter(quarter <= overall_max_quarter)
+
+# add the separation indicator variable
+final_merged_data <- final_merged_data %>%
+        group_by(examiner_id) %>%
+        mutate(max_quarter_examiner = max(quarter)) %>%
+        ungroup() %>%
+        mutate(separation_indicator = if_else(max_quarter_examiner < overall_max_quarter, 1, 0))
+
+# AU move indicator
+final_merged_data <- final_merged_data %>%
+  group_by(examiner_id) %>%
+  mutate(au_move_indicator = if_else(examiner_art_unit != lag(examiner_art_unit), 1, 0)) %>%
+  ungroup()
+
+# Fill NA for the au_move_indicator
+final_merged_data <- final_merged_data %>%
+  mutate(au_move_indicator = if_else(is.na(au_move_indicator), 0, au_move_indicator))
+
+# Drop columns that are not needed
+# applications_selected <- applications_selected %>%
+#   select(-c(max_quarter_examiner, earliest_date, latest_date, tc))
+
+```
+
+#### clean up separation indicator - only the last observation should be 1
+```{r}
+final_merged_data <- final_merged_data %>%
+  group_by(examiner_id) %>%
+  mutate(
+    last_observation = ifelse(row_number() == n(), 1, 0), # Identify the last observation
+    separation_indicator = ifelse(last_observation == 1 & any(separation_indicator == 1), 1, 0)
+  ) %>%
+  select(-last_observation) %>% # Remove the helper column
+  ungroup()
+```
+
+
+```{r}
+panel_df <- final_merged_data %>%
+  arrange(examiner_id, quarter, desc(au_count)) %>%  # arrange by descending au_count within each group
+  group_by(examiner_id, quarter) %>%
+  slice(1)
+```
+
+
+
+
+
+```{r}
+panel_df$au_size <- rowSums(panel_df[c("Asian_in_art_unit",
+                                                                 "Black_in_art_unit",
+                                                                 "Hispanic_in_art_unit",
+                                                                 "Other_in_art_unit",
+                                                                 "White_in_art_unit")],
+                                               na.rm = TRUE)
+```
+```{r}
+
+
+# Create new variable - average ration of woman and minority in art unit
+panel_df <- panel_df %>%
+  mutate(
+    woman_ratio = women_in_art_unit / au_size,
+    minority_ratio = (Asian_in_art_unit + Black_in_art_unit +
+      Hispanic_in_art_unit + Other_in_art_unit) / au_size
+  )
+
+panel_df <- panel_df %>%
+  mutate(
+    own_race_ratio = case_when(
+      race == "Asian" ~ Asian_in_art_unit / au_size,
+      race == "black" ~ Black_in_art_unit / au_size,
+      race == "Hispanic" ~ Hispanic_in_art_unit / au_size,
+      race == "other" ~ Other_in_art_unit / au_size,
+      race == "white" ~ White_in_art_unit / au_size
+    )
+  )
+```
+
+
+
+
+
+
+
+
+```{r}
+write_feather(panel_df, "/Users/kaz/Desktop/MMA - WINTER Code/Talent_data/panel_df.feather")
+```
+
+
+#### Aggregate to individual level
+- we decided to abandon panel data structure aggregated by quarter and examiner_id because some examiner moved art units multiple times in a quarter.
+- This caused the dataset to have multiple observations for the same examiner_id and quarter, which is not ideal for panel data structure.
+
+
+```{r}
+# Define a simple mode function - this is to find out the most frequent art unit of an examiner
+get_mode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+# Convert dates to years and aggregate data
+aggregated_data <- final_merged_data %>%
+  mutate(
+    earliest_year = year(as.Date(earliest_date)),
+    latest_year = year(as.Date(latest_date))
+  ) %>%
+  group_by(examiner_id) %>%
+  summarise(
+    most_freq_examiner_art_unit = get_mode(examiner_art_unit),
+    new_applications_mean = mean(new_applications),
+    ISSUED_applications_mean = mean(ISSUED_applications),
+    abn_applications_mean = mean(abn_applications),
+    PEN_applications_mean = mean(PEN_applications),
+    women_in_art_unit_mean = mean(women_in_art_unit),
+    Asian_in_art_unit_mean = mean(Asian_in_art_unit),
+    Black_in_art_unit_mean = mean(Black_in_art_unit),
+    Hispanic_in_art_unit_mean = mean(Hispanic_in_art_unit),
+    Other_in_art_unit_mean = mean(Other_in_art_unit),
+    White_in_art_unit_mean = mean(White_in_art_unit),
+    gender = first(gender),  # Assuming gender does not change
+    race = first(race),  # Assuming race does not change
+    earliest_year = min(earliest_year),
+    latest_year = max(latest_year),
+    tenure_days = first(tenure_days),  # Assuming tenure_days is consistent across records
+    separation_indicator_sum = sum(separation_indicator),
+    au_move_indicator_sum = sum(au_move_indicator)
+  )
+```
+
+#### Create new variable - average number of people in art unit
+- by getting these varibles, we can calculate avg woman ration, minority ration and so on
+```{r}
+aggregated_data$avg_num_in_art_unit <- rowSums(aggregated_data[c("Asian_in_art_unit_mean",
+                                                                 "Black_in_art_unit_mean",
+                                                                 "Hispanic_in_art_unit_mean",
+                                                                 "Other_in_art_unit_mean",
+                                                                 "White_in_art_unit_mean")],
+                                               na.rm = TRUE)
+
+
+# Create new variable - average ration of woman and minority in art unit
+aggregated_data <- aggregated_data %>%
+  mutate(
+    avg_woman_ratio = women_in_art_unit_mean / avg_num_in_art_unit,
+    avg_minority_ratio = (Asian_in_art_unit_mean + Black_in_art_unit_mean +
+      Hispanic_in_art_unit_mean + Other_in_art_unit_mean) / avg_num_in_art_unit
+  )
+
+```
+
+
+#### Ratio of your own race
+```{r}
+aggregated_data <- aggregated_data %>%
+  mutate(
+    own_race_ratio = case_when(
+      race == "Asian" ~ Asian_in_art_unit_mean / avg_num_in_art_unit,
+      race == "black" ~ Black_in_art_unit_mean / avg_num_in_art_unit,
+      race == "Hispanic" ~ Hispanic_in_art_unit_mean / avg_num_in_art_unit,
+      race == "other" ~ Other_in_art_unit_mean / avg_num_in_art_unit,
+      race == "white" ~ White_in_art_unit_mean / avg_num_in_art_unit
+    )
+  )
+```
+
+
+#### Drop latest_year and rename earliest_year to start_year
+```{r}
+aggregated_data <- aggregated_data %>%
+  select(-c(latest_year))
+
+# rename earliest_year to start_year
+aggregated_data <- aggregated_data %>%
+  rename(start_year = earliest_year)
+```
+
+
+#### Modify the data types
+```{r}
+aggregated_data <- aggregated_data %>%
+  mutate(
+    examiner_id = as.integer(examiner_id),
+    most_freq_examiner_art_unit = as.integer(most_freq_examiner_art_unit),  # or as.factor() if categorical
+    new_applications_mean = as.numeric(new_applications_mean),
+    ISSUED_applications_mean = as.numeric(ISSUED_applications_mean),
+    abn_applications_mean = as.numeric(abn_applications_mean),
+    PEN_applications_mean = as.numeric(PEN_applications_mean),
+    women_in_art_unit_mean = as.numeric(women_in_art_unit_mean),
+    Asian_in_art_unit_mean = as.numeric(Asian_in_art_unit_mean),
+    Black_in_art_unit_mean = as.numeric(Black_in_art_unit_mean),
+    Hispanic_in_art_unit_mean = as.numeric(Hispanic_in_art_unit_mean),
+    Other_in_art_unit_mean = as.numeric(Other_in_art_unit_mean),
+    White_in_art_unit_mean = as.numeric(White_in_art_unit_mean),
+    gender = as.factor(gender),
+    race = as.factor(race),
+    start_year = as.factor(start_year), # watch out I treat year as factor and not as numeric
+    tenure_days = as.integer(tenure_days),  # or as.numeric() if decimal precision is needed
+    separation_indicator_sum = as.integer(separation_indicator_sum),
+    au_move_indicator_sum = as.integer(au_move_indicator_sum),
+    avg_num_in_art_unit = as.numeric(avg_num_in_art_unit),
+    avg_woman_ratio = as.numeric(avg_woman_ratio),
+    avg_minority_ratio = as.numeric(avg_minority_ratio),
+    own_race_ratio = as.numeric(own_race_ratio)
+  )
+
+```
+
+```{r}
+str(aggregated_data)
+```
+
+
+# export the data
+```{r}
+# write_feather(aggregated_data, "/Users/kaz/Desktop/MMA - WINTER Code/Talent_data/final_project.feather")
+```
