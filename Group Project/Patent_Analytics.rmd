@@ -1,9 +1,0 @@
----
-title: "Patent Analytics"
-output: html_document
----
-
-
-```{r}
-
-```
